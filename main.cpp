@@ -8,6 +8,7 @@
 #include <vector>
 #include "gdal_priv.h"
 #include "ogrsf_frmts.h"
+#include "cpl_error.h"
 
 // Helper to collect bounds and write points
 struct PointCollector {
@@ -101,12 +102,27 @@ struct PointCollector {
 // --- Input Processing Functions ---
 
 bool processGDAL(const std::string& filename, PointCollector& pc, std::string& srsWKT) {
+  // Suppress GDAL errors while probing to avoid noise for unsupported text formats
+  CPLPushErrorHandler(CPLQuietErrorHandler);
   GDALDataset* poDS = (GDALDataset*)GDALOpenEx(filename.c_str(), GDAL_OF_VECTOR | GDAL_OF_RASTER, NULL, NULL, NULL);
+  CPLPopErrorHandler();
+
   if (poDS == nullptr) {
     return false;
   }
 
-  std::cout << "Opened with GDAL driver: " << poDS->GetDriverName() << std::endl;
+  std::string driverName = poDS->GetDriverName();
+  if (driverName == "XYZ") {
+    // GDAL's XYZ driver is specifically for gridded rasters.
+    // Irregular point clouds cause "ERROR 6: Missing values".
+    // We close it and fall back to our manual XYZ parser which is more robust for point clouds.
+    GDALClose(poDS);
+    return false;
+  }
+
+  if (!pc.writer) { // Only log on first pass
+    std::cout << "Using GDAL loader (Driver: " << driverName << ")" << std::endl;
+  }
   const char* wkt = poDS->GetProjectionRef();
   if (wkt && strlen(wkt) > 0) {
     srsWKT = wkt;
@@ -159,6 +175,10 @@ bool processXYZ(const std::string& filename, PointCollector& pc) {
   std::ifstream ifs(filename);
   if (!ifs.is_open()) {
     return false;
+  }
+
+  if (!pc.writer) { // Only log on first pass
+    std::cout << "Using manual XYZ loader." << std::endl;
   }
 
   std::string line;
