@@ -18,6 +18,14 @@ A command line tool to convert XYZ text files to ASPRS LAS format using libLAS.
     *   *Linux (Debian/Ubuntu)*: `sudo apt-get install libboost-all-dev`
     *   *macOS*: `brew install boost`
     *   *Windows*: Install Boost and set `BOOST_ROOT` environment variable.
+*   **System Libraries**: `libLAS` and its dependencies require the following system libraries:
+    *   **ZLIB**
+    *   **GDAL**
+    *   **PROJ**
+    *   **TIFF**
+    *   **JPEG**
+    *   *Linux (Debian/Ubuntu)*: `sudo apt-get install zlib1g-dev libgdal-dev libproj-dev libtiff-dev libjpeg-dev`
+    *   *macOS*: `brew install zlib gdal proj libtiff jpeg`
 
 ## Build
 
