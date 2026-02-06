@@ -193,8 +193,9 @@ else()
         add_subdirectory(${liblas_SOURCE_DIR} ${liblas_BINARY_DIR})
     endif()
 
-    set(XYZ2LAS_LIBS las)
-    set(XYZ2LAS_INCLUDES ${liblas_SOURCE_DIR}/include)
+    find_package(GDAL REQUIRED)
+    list(APPEND XYZ2LAS_LIBS las ${GDAL_LIBRARIES})
+    set(XYZ2LAS_INCLUDES ${liblas_SOURCE_DIR}/include ${GDAL_INCLUDE_DIRS})
 endif()
 
 add_executable(xyz2las main.cpp)
