@@ -97,7 +97,7 @@ bool processXYZ(const std::string& filename, PointCollector& pc) {
 
   const char* ptr = mmap.data();
   const char* end = ptr + mmap.size();
-  long last_count = 0;
+  long last_count = pc.count;
 
   while (ptr < end) {
     const char* next_newline = (const char*)std::memchr(ptr, '\n', end - ptr);

@@ -10,13 +10,9 @@
 #include "PointCollector.hpp"
 #include "InputProcessor.hpp"
 
-// --- General Helpers ---
+#include <cxxopts.hpp>
 
-void printUsage() {
-  std::cout << "Usage: xyz2las <input> <output.las|laz> [scale] [-c|--color]" << std::endl;
-  std::cout << "  scale: optional float, default 0.01" << std::endl;
-  std::cout << "  -c, --color: optional, colorize points based on Z-height (dark to light)" << std::endl;
-}
+// --- General Helpers ---
 
 bool isLazFile(const std::string& filename) {
   if (filename.length() < 4) {
@@ -31,29 +27,49 @@ int main(int argc, char* argv[]) {
   GDALAllRegister();
   OGRRegisterAll();
 
-  if (argc < 3) {
-    printUsage();
+  cxxopts::Options options("xyz2las", "Convert XYZ/GDAL files to LAS/LAZ");
+  options.add_options()
+    ("positional", "Positional arguments (inputs... output)", cxxopts::value<std::vector<std::string>>())
+    ("s,scale", "Scale factor", cxxopts::value<double>()->default_value("0.01"))
+    ("c,color", "Colorize points based on Z-height (dark to light)", cxxopts::value<bool>()->default_value("false"))
+    ("h,help", "Print usage");
+
+  options.parse_positional({"positional"});
+  options.positional_help("<input1.xyz> [input2.xyz ...] <output.las|laz>");
+
+  cxxopts::ParseResult result;
+  try {
+    result = options.parse(argc, argv);
+  } catch (const cxxopts::exceptions::exception& e) {
+    std::cerr << "Error parsing options: " << e.what() << std::endl;
+    std::cout << options.help() << std::endl;
     return 1;
   }
 
-  std::string inputFilename  = argv[1];
-  std::string outputFilename = argv[2];
-  double      scale          = 0.01;
-  bool        colorize       = false;
-
-  for (int i = 3; i < argc; ++i) {
-    std::string arg = argv[i];
-    if (arg == "-c" || arg == "--color") {
-      colorize = true;
-    } else {
-      try {
-        scale = std::stod(arg);
-      } catch (...) {
-      }
-    }
+  if (result.count("help")) {
+    std::cout << options.help() << std::endl;
+    return 0;
   }
 
-  std::cout << "Processing " << inputFilename << std::endl;
+  if (!result.count("positional")) {
+    std::cerr << "Error: Missing input/output files." << std::endl;
+    std::cout << options.help() << std::endl;
+    return 1;
+  }
+
+  auto files = result["positional"].as<std::vector<std::string>>();
+  if (files.size() < 2) {
+    std::cerr << "Error: At least one input file and one output file are required." << std::endl;
+    std::cout << options.help() << std::endl;
+    return 1;
+  }
+
+  std::string outputFilename = files.back();
+  files.pop_back();
+  std::vector<std::string> inputFilenames = files;
+
+  double scale = result["scale"].as<double>();
+  bool colorize = result["color"].as<bool>();
 
   std::vector<double> zValues;
   std::string         srsWKT = "";
@@ -61,12 +77,14 @@ int main(int argc, char* argv[]) {
   pc1.colorize = colorize;
   pc1.zValues  = &zValues;
 
-  if (!processInput(inputFilename, pc1, srsWKT)) {
-    std::cerr << "Cannot open or process input file: " << inputFilename << std::endl;
-    return 1;
+  for (const auto& inputFilename : inputFilenames) {
+    std::cout << "Processing " << inputFilename << std::endl;
+    if (!processInput(inputFilename, pc1, srsWKT)) {
+      std::cerr << "Cannot open or process input file: " << inputFilename << std::endl;
+      return 1;
+    }
+    std::cout << std::endl;
   }
-
-  std::cout << std::endl;
 
   if (pc1.count == 0) {
     std::cerr << "No valid points found." << std::endl;
@@ -136,10 +154,11 @@ int main(int argc, char* argv[]) {
     pc2.zFactor     = zFactor;
     pc2.totalPoints = pc1.count;
 
-    std::string dummySrs;
-    processInput(inputFilename, pc2, dummySrs);
-
-    std::cout << std::endl;
+    for (const auto& inputFilename : inputFilenames) {
+      std::string dummySrs;
+      processInput(inputFilename, pc2, dummySrs);
+      std::cout << std::endl;
+    }
 
     std::cout << "Successfully wrote " << pc2.count << " points." << std::endl;
   } catch (std::exception const& e) {

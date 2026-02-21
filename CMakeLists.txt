@@ -154,6 +154,14 @@ else()
   )
   FetchContent_MakeAvailable(mio)
 
+  # 5. cxxopts (for command line arguments)
+  FetchContent_Declare(
+    cxxopts
+    GIT_REPOSITORY https://github.com/jarro2783/cxxopts.git
+    GIT_TAG        v3.1.1
+  )
+  FetchContent_MakeAvailable(cxxopts)
+
   # Use 'master' branch for better compatibility with modern Boost versions
   FetchContent_Declare(
     liblas
@@ -226,7 +234,7 @@ else()
 endif()
 
 add_library(xyz2las_core STATIC src/PointCollector.cpp src/InputProcessor.cpp)
-target_link_libraries(xyz2las_core PUBLIC ${XYZ2LAS_LIBS} fast_float mio)
+target_link_libraries(xyz2las_core PUBLIC ${XYZ2LAS_LIBS} fast_float mio cxxopts)
 target_include_directories(xyz2las_core PUBLIC include)
 
 if(XYZ2LAS_INCLUDES)
