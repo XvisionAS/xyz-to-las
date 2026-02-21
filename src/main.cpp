@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  std::cout << "Scanning " << inputFilename << "..." << std::endl;
+  std::cout << "Processing " << inputFilename << std::endl;
 
   std::vector<double> zValues;
   std::string         srsWKT = "";
@@ -66,9 +66,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  if (pc1.count >= 100000) {
-    std::cout << std::endl;
-  }
+  std::cout << std::endl;
 
   if (pc1.count == 0) {
     std::cerr << "No valid points found." << std::endl;
@@ -141,9 +139,7 @@ int main(int argc, char* argv[]) {
     std::string dummySrs;
     processInput(inputFilename, pc2, dummySrs);
 
-    if (pc2.count >= 100000) {
-      std::cout << std::endl;
-    }
+    std::cout << std::endl;
 
     std::cout << "Successfully wrote " << pc2.count << " points." << std::endl;
   } catch (std::exception const& e) {

@@ -24,8 +24,6 @@ void PointCollector::addPoint(double x, double y, double z) {
     if (totalPoints > 0) {
       int percent = static_cast<int>((count * 100.0) / totalPoints);
       std::cout << "\rWriting points: " << count << " / " << totalPoints << " (" << percent << "%)" << std::flush;
-    } else {
-      std::cout << "\rScanning points: " << count << "..." << std::flush;
     }
   }
 
