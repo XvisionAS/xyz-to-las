@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <cstring>
+#include <cmath>
 #include "fast_float/fast_float.h"
 #include <mio/mmap.hpp>
 #include "gdal_priv.h"
@@ -39,6 +40,12 @@ bool processGDAL(const std::string& filename, PointCollector& pc, std::string& s
     bool            hasGeo     = poDS->GetGeoTransform(adfGT) == CE_None;
     int             bHasNoData = 0;
     double          noData     = poBand->GetNoDataValue(&bHasNoData);
+    
+    int             bHasScale = 0, bHasOffset = 0;
+    double          bandScale  = poBand->GetScale(&bHasScale);
+    double          bandOffset = poBand->GetOffset(&bHasOffset);
+    if (!bHasScale) bandScale = 1.0;
+    if (!bHasOffset) bandOffset = 0.0;
 
     std::vector<float> row(nXSize);
     for (int y = 0; y < nYSize; ++y) {
@@ -51,13 +58,17 @@ bool processGDAL(const std::string& filename, PointCollector& pc, std::string& s
       }
       for (int x = 0; x < nXSize; ++x) {
         double z = row[x];
-        if (bHasNoData && z == noData) {
+        if (std::isnan(z)) {
           continue;
         }
+        if (bHasNoData && (z == noData || (std::isnan(noData) && std::isnan(z)))) {
+          continue;
+        }
+        z = z * bandScale + bandOffset;
         double wx = static_cast<double>(x), wy = static_cast<double>(y);
         if (hasGeo) {
-          wx = adfGT[0] + x * adfGT[1] + y * adfGT[2];
-          wy = adfGT[3] + x * adfGT[4] + y * adfGT[5];
+          wx = adfGT[0] + (x + 0.5) * adfGT[1] + (y + 0.5) * adfGT[2];
+          wy = adfGT[3] + (x + 0.5) * adfGT[4] + (y + 0.5) * adfGT[5];
         }
         pc.addPoint(wx, wy, z);
       }

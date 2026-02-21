@@ -2,7 +2,10 @@
 #include <catch2/benchmark/catch_benchmark.hpp>
 #include <fstream>
 #include <cstdio>
+#include <limits>
+#include <cmath>
 
+#include "gdal_priv.h"
 #include "PointCollector.hpp"
 #include "InputProcessor.hpp"
 
@@ -66,6 +69,90 @@ TEST_CASE("XYZ Parser Benchmark", "[benchmark]") {
         pc.quiet = true;
         return processXYZ(test_file, pc);
     };
+
+    std::remove(test_file);
+}
+
+TEST_CASE("GDAL Parser handles GeoTIFF files", "[gdal]") {
+    GDALAllRegister();
+    const char* test_file = "test_gdal.tif";
+
+    GDALDriver* poDriver = GetGDALDriverManager()->GetDriverByName("GTiff");
+    REQUIRE(poDriver != nullptr);
+
+    GDALDataset* poDS = poDriver->Create(test_file, 2, 2, 1, GDT_Float32, nullptr);
+    REQUIRE(poDS != nullptr);
+
+    double adfGeoTransform[6] = { 10.0, 2.0, 0.0, 20.0, 0.0, -2.0 };
+    poDS->SetGeoTransform(adfGeoTransform);
+
+    GDALRasterBand* poBand = poDS->GetRasterBand(1);
+    poBand->SetNoDataValue(-9999.0);
+
+    float rasterData[4] = { 1.0f, -9999.0f, 3.0f, 4.0f };
+    CPLErr err = poBand->RasterIO(GF_Write, 0, 0, 2, 2, rasterData, 2, 2, GDT_Float32, 0, 0);
+    REQUIRE(err == CE_None);
+
+    GDALClose(poDS);
+
+    PointCollector pc;
+    pc.quiet = true;
+    std::string srsWKT;
+    bool success = processGDAL(test_file, pc, srsWKT);
+
+    REQUIRE(success == true);
+    REQUIRE(pc.count == 3); // One NoData value skipped
+
+    // Check coordinates
+    // Pixel 0,0 -> x = 10 + 0.5*2 = 11, y = 20 + 0.5*-2 = 19, z = 1
+    // Pixel 1,0 -> NoData
+    // Pixel 0,1 -> x = 10 + 0.5*2 = 11, y = 20 + 1.5*-2 = 17, z = 3
+    // Pixel 1,1 -> x = 10 + 1.5*2 = 13, y = 20 + 1.5*-2 = 17, z = 4
+
+    REQUIRE(pc.minX == 11.0);
+    REQUIRE(pc.maxX == 13.0);
+    REQUIRE(pc.minY == 17.0);
+    REQUIRE(pc.maxY == 19.0);
+    REQUIRE(pc.minZ == 1.0);
+    REQUIRE(pc.maxZ == 4.0);
+
+    std::remove(test_file);
+}
+
+TEST_CASE("GDAL Parser handles NaN and Scale/Offset", "[gdal]") {
+    GDALAllRegister();
+    const char* test_file = "test_gdal_nan.tif";
+
+    GDALDriver* poDriver = GetGDALDriverManager()->GetDriverByName("GTiff");
+    REQUIRE(poDriver != nullptr);
+
+    GDALDataset* poDS = poDriver->Create(test_file, 2, 1, 1, GDT_Float32, nullptr);
+    REQUIRE(poDS != nullptr);
+    
+    double adfGeoTransform[6] = { 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 };
+    poDS->SetGeoTransform(adfGeoTransform);
+
+    GDALRasterBand* poBand = poDS->GetRasterBand(1);
+    poBand->SetScale(2.0);
+    poBand->SetOffset(10.0);
+    
+    float rasterData[2] = { 5.0f, std::numeric_limits<float>::quiet_NaN() };
+    CPLErr err = poBand->RasterIO(GF_Write, 0, 0, 2, 1, rasterData, 2, 1, GDT_Float32, 0, 0);
+    REQUIRE(err == CE_None);
+
+    GDALClose(poDS);
+
+    PointCollector pc;
+    pc.quiet = true;
+    std::string srsWKT;
+    bool success = processGDAL(test_file, pc, srsWKT);
+
+    REQUIRE(success == true);
+    REQUIRE(pc.count == 1); // NaN skipped
+
+    // z = 5.0 * 2.0 + 10.0 = 20.0
+    REQUIRE(pc.minZ == 20.0);
+    REQUIRE(pc.maxZ == 20.0);
 
     std::remove(test_file);
 }
