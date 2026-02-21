@@ -20,11 +20,12 @@ struct PointCollector {
   liblas::Header*      header;
   liblas::Writer*      writer;
   double               colorMinZ, zFactor;
+  long                 totalPoints;
 
   PointCollector() : minX(DBL_MAX), minY(DBL_MAX), minZ(DBL_MAX),
                      maxX(-DBL_MAX), maxY(-DBL_MAX), maxZ(-DBL_MAX),
                      count(0), colorize(false), zValues(nullptr),
-                     header(nullptr), writer(nullptr), colorMinZ(0), zFactor(0) {}
+                     header(nullptr), writer(nullptr), colorMinZ(0), zFactor(0), totalPoints(0) {}
 
   void addPoint(double x, double y, double z) {
     if (x < minX) {
@@ -46,6 +47,16 @@ struct PointCollector {
       maxZ = z;
     }
     count++;
+
+    if (count % 100000 == 0) {
+      if (totalPoints > 0) {
+        int percent = static_cast<int>((count * 100.0) / totalPoints);
+        std::cout << "\rWriting points: " << count << " / " << totalPoints << " (" << percent << "%)" << std::flush;
+      } else {
+        std::cout << "\rScanning points: " << count << "..." << std::flush;
+      }
+    }
+
     if (colorize && zValues) {
       zValues->push_back(z);
     }
@@ -261,6 +272,10 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  if (pc1.count >= 100000) {
+    std::cout << std::endl;
+  }
+
   if (pc1.count == 0) {
     std::cerr << "No valid points found." << std::endl;
     return 1;
@@ -299,6 +314,7 @@ int main(int argc, char* argv[]) {
   double colorMinZ = pc1.minZ;
   double colorMaxZ = pc1.maxZ;
   if (colorize && !zValues.empty()) {
+    std::cout << "Calculating Z percentiles for colorization..." << std::endl;
     std::sort(zValues.begin(), zValues.end());
     colorMinZ = zValues[static_cast<size_t>(zValues.size() * 0.02)];
     colorMaxZ = zValues[std::min(static_cast<size_t>(zValues.size() * 0.98), zValues.size() - 1)];
@@ -321,14 +337,19 @@ int main(int argc, char* argv[]) {
     }
     liblas::Writer writer(ofs, header);
     PointCollector pc2;
-    pc2.colorize  = colorize;
-    pc2.header    = &header;
-    pc2.writer    = &writer;
-    pc2.colorMinZ = colorMinZ;
-    pc2.zFactor   = zFactor;
+    pc2.colorize    = colorize;
+    pc2.header      = &header;
+    pc2.writer      = &writer;
+    pc2.colorMinZ   = colorMinZ;
+    pc2.zFactor     = zFactor;
+    pc2.totalPoints = pc1.count;
 
     std::string dummySrs;
     processInput(inputFilename, pc2, dummySrs);
+
+    if (pc2.count >= 100000) {
+      std::cout << std::endl;
+    }
 
     std::cout << "Successfully wrote " << pc2.count << " points." << std::endl;
   } catch (std::exception const& e) {
