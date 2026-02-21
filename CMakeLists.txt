@@ -138,6 +138,22 @@ else()
     list(APPEND XYZ2LAS_LIBS geotiff_library)
   endif()
 
+  # 3. fast_float (for extremely fast XYZ parsing)
+  FetchContent_Declare(
+    fast_float
+    GIT_REPOSITORY https://github.com/fastfloat/fast_float.git
+    GIT_TAG        v6.1.1
+  )
+  FetchContent_MakeAvailable(fast_float)
+
+  # 4. mio (for memory mapped file I/O)
+  FetchContent_Declare(
+    mio
+    GIT_REPOSITORY https://github.com/mandreyel/mio.git
+    GIT_TAG        master
+  )
+  FetchContent_MakeAvailable(mio)
+
   # Use 'master' branch for better compatibility with modern Boost versions
   FetchContent_Declare(
     liblas
@@ -209,12 +225,30 @@ else()
   set(XYZ2LAS_INCLUDES ${liblas_SOURCE_DIR}/include ${GDAL_INCLUDE_DIRS})
 endif()
 
-add_executable(xyz2las main.cpp)
-target_link_libraries(xyz2las PRIVATE ${XYZ2LAS_LIBS})
+add_library(xyz2las_core STATIC src/PointCollector.cpp src/InputProcessor.cpp)
+target_link_libraries(xyz2las_core PUBLIC ${XYZ2LAS_LIBS} fast_float mio)
+target_include_directories(xyz2las_core PUBLIC include)
 
 if(XYZ2LAS_INCLUDES)
-  target_include_directories(xyz2las PRIVATE ${XYZ2LAS_INCLUDES})
+  target_include_directories(xyz2las_core PUBLIC ${XYZ2LAS_INCLUDES})
 endif()
+target_include_directories(xyz2las_core PUBLIC ${Boost_INCLUDE_DIRS})
 
-# Ensure Boost headers are available
-target_include_directories(xyz2las PRIVATE ${Boost_INCLUDE_DIRS})
+add_executable(xyz2las src/main.cpp)
+target_link_libraries(xyz2las PRIVATE xyz2las_core)
+
+# --- Testing & Benchmarking ---
+enable_testing()
+
+FetchContent_Declare(
+  Catch2
+  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+  GIT_TAG        v3.4.0
+)
+FetchContent_MakeAvailable(Catch2)
+
+add_executable(xyz2las_test test/test_parser.cpp)
+target_link_libraries(xyz2las_test PRIVATE Catch2::Catch2WithMain xyz2las_core)
+
+include(Catch)
+catch_discover_tests(xyz2las_test)

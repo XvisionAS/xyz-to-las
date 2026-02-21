@@ -6,6 +6,11 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include "fast_float/fast_float.h"
+#include <mio/mmap.hpp>
 #include "gdal_priv.h"
 #include "ogrsf_frmts.h"
 #include "cpl_error.h"
@@ -21,11 +26,18 @@ struct PointCollector {
   liblas::Writer*      writer;
   double               colorMinZ, zFactor;
   long                 totalPoints;
+  liblas::Point*       reusablePoint;
 
   PointCollector() : minX(DBL_MAX), minY(DBL_MAX), minZ(DBL_MAX),
                      maxX(-DBL_MAX), maxY(-DBL_MAX), maxZ(-DBL_MAX),
                      count(0), colorize(false), zValues(nullptr),
-                     header(nullptr), writer(nullptr), colorMinZ(0), zFactor(0), totalPoints(0) {}
+                     header(nullptr), writer(nullptr), colorMinZ(0), zFactor(0), totalPoints(0), reusablePoint(nullptr) {}
+
+  ~PointCollector() {
+    if (reusablePoint) {
+      delete reusablePoint;
+    }
+  }
 
   void addPoint(double x, double y, double z) {
     if (x < minX) {
@@ -62,8 +74,10 @@ struct PointCollector {
     }
 
     if (writer && header) {
-      liblas::Point point(header);
-      point.SetCoordinates(x, y, z);
+      if (!reusablePoint) {
+        reusablePoint = new liblas::Point(header);
+      }
+      reusablePoint->SetCoordinates(x, y, z);
       if (colorize) {
         double normZ = (z - colorMinZ) * zFactor;
         if (normZ < 0) {
@@ -74,9 +88,9 @@ struct PointCollector {
         }
         uint16_t      val = static_cast<uint16_t>(normZ * 65535.0);
         liblas::Color c(val, val, val);
-        point.SetColor(c);
+        reusablePoint->SetColor(c);
       }
-      writer->WritePoint(point);
+      writer->WritePoint(*reusablePoint);
     }
   }
 
@@ -183,28 +197,53 @@ bool processGDAL(const std::string& filename, PointCollector& pc, std::string& s
 }
 
 bool processXYZ(const std::string& filename, PointCollector& pc) {
-  std::ifstream ifs(filename);
-  if (!ifs.is_open()) {
+  std::error_code error;
+  mio::mmap_source mmap;
+  mmap.map(filename, error);
+  if (error) {
     return false;
   }
 
   if (!pc.writer) { // Only log on first pass
-    std::cout << "Using manual XYZ loader." << std::endl;
+    std::cout << "Using fast manual XYZ loader (mio)." << std::endl;
   }
 
-  std::string line;
-  while (std::getline(ifs, line)) {
-    size_t first = line.find_first_not_of(" \t\r\n");
-    if (first == std::string::npos || line[first] == '#' || line[first] == '/') {
-      continue;
+  const char* ptr = mmap.data();
+  const char* end = ptr + mmap.size();
+
+  while (ptr < end) {
+    const char* next_newline = (const char*)std::memchr(ptr, '\n', end - ptr);
+    const char* endOfLine = next_newline ? next_newline : end;
+
+    const char* linePtr = ptr;
+    // Skip whitespace
+    while (linePtr < endOfLine && (*linePtr == ' ' || *linePtr == '\t' || *linePtr == '\r')) {
+      linePtr++;
     }
 
-    std::stringstream ss(line);
-    double            x, y, z;
-    if (ss >> x >> y >> z) {
-      pc.addPoint(x, y, z);
+    if (linePtr < endOfLine && *linePtr != '#' && *linePtr != '/') {
+      double x, y, z;
+      auto answer = fast_float::from_chars(linePtr, endOfLine, x);
+      if (answer.ec == std::errc()) {
+        linePtr = answer.ptr;
+        while (linePtr < endOfLine && (*linePtr == ' ' || *linePtr == '\t' || *linePtr == '\r')) linePtr++;
+        
+        answer = fast_float::from_chars(linePtr, endOfLine, y);
+        if (answer.ec == std::errc()) {
+          linePtr = answer.ptr;
+          while (linePtr < endOfLine && (*linePtr == ' ' || *linePtr == '\t' || *linePtr == '\r')) linePtr++;
+          
+          answer = fast_float::from_chars(linePtr, endOfLine, z);
+          if (answer.ec == std::errc()) {
+            pc.addPoint(x, y, z);
+          }
+        }
+      }
     }
+
+    ptr = endOfLine + 1;
   }
+
   return true;
 }
 
@@ -233,6 +272,7 @@ bool isLazFile(const std::string& filename) {
   return ext == ".laz";
 }
 
+#ifndef RUN_TESTS
 int main(int argc, char* argv[]) {
   GDALAllRegister();
   OGRRegisterAll();
@@ -359,3 +399,4 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
+#endif
