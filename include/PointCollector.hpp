@@ -17,6 +17,7 @@ struct PointCollector {
   double               colorMinZ, zFactor;
   long                 totalPoints;
   liblas::Point*       reusablePoint;
+  bool                 quiet;
 
   PointCollector();
   ~PointCollector();

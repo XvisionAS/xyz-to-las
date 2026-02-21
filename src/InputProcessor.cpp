@@ -42,9 +42,9 @@ bool processGDAL(const std::string& filename, PointCollector& pc, std::string& s
 
     std::vector<float> row(nXSize);
     for (int y = 0; y < nYSize; ++y) {
-      if (pc.totalPoints == 0 && y % 100 == 0) {
+      if (!pc.quiet && pc.totalPoints == 0 && y % 100 == 0) {
         int percent = static_cast<int>((y * 100.0) / nYSize);
-        std::cout << "\rScanning file: " << percent << "%" << std::flush;
+        std::cout << "\rScanning file: " << percent << "%   " << std::flush;
       }
       if (poBand->RasterIO(GF_Read, 0, y, nXSize, 1, &row[0], nXSize, 1, GDT_Float32, 0, 0) != CE_None) {
         continue;
@@ -62,7 +62,7 @@ bool processGDAL(const std::string& filename, PointCollector& pc, std::string& s
         pc.addPoint(wx, wy, z);
       }
     }
-    if (pc.totalPoints == 0) std::cout << "\rScanning file: 100%" << std::flush;
+    if (!pc.quiet && pc.totalPoints == 0) std::cout << "\rScanning file: 100%   " << std::flush;
   } else {
     for (int i = 0; i < poDS->GetLayerCount(); ++i) {
       OGRLayer* poLayer = poDS->GetLayer(i);
@@ -72,14 +72,14 @@ bool processGDAL(const std::string& filename, PointCollector& pc, std::string& s
       OGRFeature* poFeature;
       while ((poFeature = poLayer->GetNextFeature()) != nullptr) {
         currentFeature++;
-        if (pc.totalPoints == 0 && currentFeature % 10000 == 0 && totalFeatures > 0) {
+        if (!pc.quiet && pc.totalPoints == 0 && currentFeature % 10000 == 0 && totalFeatures > 0) {
           int percent = static_cast<int>((currentFeature * 100.0) / totalFeatures);
-          std::cout << "\rScanning file: " << percent << "%" << std::flush;
+          std::cout << "\rScanning file: " << percent << "%   " << std::flush;
         }
         pc.processGeometry(poFeature->GetGeometryRef());
         OGRFeature::DestroyFeature(poFeature);
       }
-      if (pc.totalPoints == 0) std::cout << "\rScanning file: 100%" << std::flush;
+      if (!pc.quiet && pc.totalPoints == 0) std::cout << "\rScanning file: 100%   " << std::flush;
     }
   }
 
@@ -129,17 +129,17 @@ bool processXYZ(const std::string& filename, PointCollector& pc) {
       }
     }
 
-    if (pc.totalPoints == 0 && pc.count - last_count >= 100000) {
+    if (!pc.quiet && pc.totalPoints == 0 && pc.count - last_count >= 100000) {
       int percent = static_cast<int>((ptr - mmap.data()) * 100.0 / mmap.size());
-      std::cout << "\rScanning file: " << percent << "%" << std::flush;
+      std::cout << "\rScanning file: " << percent << "%   " << std::flush;
       last_count = pc.count;
     }
 
     ptr = endOfLine + 1;
   }
 
-  if (pc.totalPoints == 0) {
-    std::cout << "\rScanning file: 100%" << std::flush;
+  if (!pc.quiet && pc.totalPoints == 0) {
+    std::cout << "\rScanning file: 100%   " << std::flush;
   }
 
   return true;

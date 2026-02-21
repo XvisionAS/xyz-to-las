@@ -3,7 +3,7 @@
 PointCollector::PointCollector() : minX(DBL_MAX), minY(DBL_MAX), minZ(DBL_MAX),
                      maxX(-DBL_MAX), maxY(-DBL_MAX), maxZ(-DBL_MAX),
                      count(0), colorize(false), zValues(nullptr),
-                     header(nullptr), writer(nullptr), colorMinZ(0), zFactor(0), totalPoints(0), reusablePoint(nullptr) {}
+                     header(nullptr), writer(nullptr), colorMinZ(0), zFactor(0), totalPoints(0), reusablePoint(nullptr), quiet(false) {}
 
 PointCollector::~PointCollector() {
   if (reusablePoint) {
@@ -20,10 +20,10 @@ void PointCollector::addPoint(double x, double y, double z) {
   if (z > maxZ) maxZ = z;
   count++;
 
-  if (count % 100000 == 0) {
+  if (!quiet && count % 100000 == 0) {
     if (totalPoints > 0) {
       int percent = static_cast<int>((count * 100.0) / totalPoints);
-      std::cout << "\rWriting points: " << count << " / " << totalPoints << " (" << percent << "%)" << std::flush;
+      std::cout << "\rWriting points: " << count << " / " << totalPoints << " (" << percent << "%)   " << std::flush;
     }
   }
 

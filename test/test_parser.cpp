@@ -18,6 +18,7 @@ TEST_CASE("XYZ Parser handles basic files", "[parser]") {
     out.close();
 
     PointCollector pc;
+    pc.quiet = true;
     bool success = processXYZ(test_file, pc);
 
     REQUIRE(success == true);
@@ -41,6 +42,7 @@ TEST_CASE("XYZ Parser handles empty and invalid files", "[parser]") {
     out.close();
 
     PointCollector pc;
+    pc.quiet = true;
     bool success = processXYZ(test_file, pc);
 
     REQUIRE(success == true); // File opens successfully
@@ -61,6 +63,7 @@ TEST_CASE("XYZ Parser Benchmark", "[benchmark]") {
 
     BENCHMARK("Parse 100k points") {
         PointCollector pc;
+        pc.quiet = true;
         return processXYZ(test_file, pc);
     };
 
